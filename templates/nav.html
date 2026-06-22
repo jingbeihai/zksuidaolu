@@ -1,0 +1,26 @@
+<div class="top-nav">
+  <div class="app-tabs">
+    {% set current_path = request.url.path %}
+    {% set user_data = request.session.get('user', {}) %}
+    {% set modules = [
+      ('/device/', '设备管理', 'device'),
+      ('/process/', '工艺管理', 'process'),
+      ('/schedule/', '排产管理', 'schedule'),
+      ('/production/', '生产控制', 'production'),
+      ('/tv', 'TV大屏', 'tv'),
+      ('/user/', '用户管理', 'user'),
+      ('/log/', '日志系统', 'log'),
+      ('/backup/', '数据备份', 'backup'),
+    ] %}
+    {% for url, name, perm in modules %}
+      {% if user_data.get('is_admin') or (user_data.get('permissions') and user_data['permissions'].get(perm) == 1) or perm == 'tv' %}
+      <a href="{{ url }}" class="tab {% if current_path.startswith(url) %}active{% endif %}">{{ name }}</a>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="nav-right">
+    <span class="nav-brand">中科恒泰隧道炉 · 排产与生产可视化系统</span>
+    <span class="user-name">{{ user_data.get('real_name', '') }}</span>
+    <a href="/logout" class="nav-link">退出</a>
+  </div>
+</div>

@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}工艺管理 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>工艺组合管理</h2>
+  <div class="header-right">
+    <span class="breadcrumb">首页 / 工艺管理</span>
+    <a href="/process/create/" class="btn btn-primary">+ 新建产品工艺组合</a>
+  </div>
+</div>
+
+<div class="page-card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:60px">序号</th>
+        <th>产品名称</th>
+        <th>产品编号</th>
+        <th>描述</th>
+        <th>工艺版本</th>
+        <th style="width:180px">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in products %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><strong>{{ p.name }}</strong></td>
+        <td>{{ p.code }}</td>
+        <td style="color:#7f8c8d;font-size:13px">{{ p.description or '-' }}</td>
+        <td>
+          {% set procs = process_map.get(p.id, []) %}
+          {% if procs %}
+            {% for proc in procs %}
+              <span class="badge badge-{{ 'published' if proc.status == 'published' else 'draft' }}" style="margin-right:4px;margin-bottom:4px;display:inline-flex;align-items:center;cursor:pointer" data-proc-id="{{ proc.id }}" onclick="editStepsFromBadge(this)" title="点击编辑步骤">
+                {{ proc.process_name }} v{{ proc.version_no }}
+                {% if proc.status == 'published' %}<span style="font-weight:700;margin-left:2px">✓</span>{% endif %}
+              </span>
+              <span onclick="deleteProcess({{ proc.id }})" style="color:#e74c3c;cursor:pointer;font-size:11px;margin-right:8px" title="删除">✕</span>
+            {% endfor %}
+          {% else %}
+            <span style="color:#bdc3c7;font-size:12px">未创建工艺</span>
+          {% endif %}
+        </td>
+        <td>
+          <button class="btn btn-sm" onclick="addProcess({{ p.id }}, '{{ p.name }}')">新建工艺</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteProduct({{ p.id }})">删除</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- 新增产品弹窗 -->
+<div id="addProductModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:460px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#1a5276;font-size:18px">新增产品</h3>
+      <button onclick="closeModal('addProductModal')" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">产品名称 *</label>
+      <input id="prodName" type="text" style="width:100%;padding:8px 10px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">产品编号 *</label>
+      <input id="prodCode" type="text" style="width:100%;padding:8px 10px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">描述</label>
+      <textarea id="prodDesc" rows="2" style="width:100%;padding:8px 10px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px;box-sizing:border-box;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #d5dbdf">
+      <button class="btn" onclick="closeModal('addProductModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveProduct()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建工艺弹窗 -->
+<div id="addProcessModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:500px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#1a5276;font-size:18px" id="addProcessTitle">新建工艺</h3>
+      <button onclick="closeModal('addProcessModal')" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <p style="font-size:13px;color:#7f8c8d;margin-bottom:16px" id="addProcessProductName"></p>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">工艺名称 *</label>
+      <input id="procName" type="text" style="width:100%;padding:8px 10px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px;box-sizing:border-box" placeholder="例如: 标准固化工艺">
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">版本号 *</label>
+      <input id="procVersion" type="text" style="width:100%;padding:8px 10px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px;box-sizing:border-box" placeholder="例如: V1.0">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #d5dbdf">
+      <button class="btn" onclick="closeModal('addProcessModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveProcess()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 工艺步骤编辑弹窗 -->
+<div id="stepModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:900px;max-height:85vh;overflow:auto;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#1a5276;font-size:18px" id="stepModalTitle">编辑工艺步骤</h3>
+      <button onclick="closeModal('stepModal')" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="margin-bottom:12px;display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="addStepRow()">+ 添加步骤</button>
+      <button class="btn btn-sm btn-primary" id="publishBtn" onclick="publishProcess()">发布工艺</button>
+    </div>
+
+    <table class="data-table" style="margin-bottom:12px">
+      <thead>
+        <tr>
+          <th style="width:50px">步骤</th>
+          <th style="width:90px">起始节</th>
+          <th style="width:90px">结束节</th>
+          <th style="width:90px">目标温度°C</th>
+          <th>操作指南</th>
+          <th>关键现象</th>
+          <th style="width:50px"></th>
+        </tr>
+      </thead>
+      <tbody id="stepTableBody">
+      </tbody>
+    </table>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #d5dbdf">
+      <button class="btn" onclick="closeModal('stepModal')">关闭</button>
+      <button class="btn btn-primary" onclick="saveSteps()">保存步骤</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var currentProductId = null;
+var currentProcessId = null;
+
+// ===== 产品管理 =====
+function showAddProduct() {
+    document.getElementById('prodName').value = '';
+    document.getElementById('prodCode').value = '';
+    document.getElementById('prodDesc').value = '';
+    document.getElementById('addProductModal').style.display = 'flex';
+}
+
+function saveProduct() {
+    var name = document.getElementById('prodName').value.trim();
+    var code = document.getElementById('prodCode').value.trim();
+    if (!name || !code) { alert('请填写产品名称和编号'); return; }
+    post('/api/process/product/create', { name: name, code: code, description: document.getElementById('prodDesc').value.trim() }, function(r) {
+        if (r.success) { closeModal('addProductModal'); location.reload(); }
+        else { alert(r.message); }
+    });
+}
+
+function deleteProduct(id) {
+    if (!confirm('确认删除该产品？')) return;
+    post('/api/process/product/delete/' + id, {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+// ===== 工艺管理 =====
+function addProcess(productId, productName) {
+    currentProductId = productId;
+    document.getElementById('addProcessProductName').textContent = '产品: ' + productName;
+    document.getElementById('procName').value = '';
+    document.getElementById('procVersion').value = '';
+    document.getElementById('addProcessModal').style.display = 'flex';
+}
+
+function saveProcess() {
+    var name = document.getElementById('procName').value.trim();
+    var version = document.getElementById('procVersion').value.trim();
+    if (!name || !version) { alert('请填写工艺名称和版本号'); return; }
+    post('/api/process/create', { product_id: currentProductId, process_name: name, version_no: version }, function(r) {
+        if (r.success) { closeModal('addProcessModal'); location.reload(); }
+        else { alert(r.message); }
+    });
+}
+
+// ===== 步骤编辑 =====
+function editStepsFromBadge(el) {
+    var procId = el.dataset.procId;
+    editSteps(procId);
+}
+
+function editSteps(processId) {
+    currentProcessId = processId;
+    get('/api/process/' + processId, function(data) {
+        document.getElementById('stepModalTitle').textContent = data.process_name + ' v' + data.version_no + ' - 工艺步骤';
+        renderStepRows(data.steps || []);
+        var pubBtn = document.getElementById('publishBtn');
+        if (data.status === 'published') {
+            pubBtn.textContent = '取消发布';
+            pubBtn.onclick = function() { unpublishProcess(processId); };
+        } else {
+            pubBtn.textContent = '发布工艺';
+            pubBtn.onclick = function() { publishProcess(processId); };
+        }
+        document.getElementById('stepModal').style.display = 'flex';
+    });
+}
+
+function renderStepRows(steps) {
+    var tbody = document.getElementById('stepTableBody');
+    if (steps.length === 0) {
+        steps = [{ step_order: 1, section_start: '', section_end: '', target_temp: '', operation_guide: '', key_phenomena: '' }];
+    }
+    tbody.innerHTML = steps.map(function(s, idx) {
+        return '<tr>' +
+            '<td style="text-align:center;font-weight:700">' + (idx + 1) + '</td>' +
+            '<td><input type="number" value="' + (s.section_start || '') + '" style="width:60px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="section_start"></td>' +
+            '<td><input type="number" value="' + (s.section_end || '') + '" style="width:60px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="section_end"></td>' +
+            '<td><input type="number" value="' + (s.target_temp || '') + '" style="width:70px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="target_temp"></td>' +
+            '<td><input type="text" value="' + (s.operation_guide || '') + '" style="width:160px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="operation_guide"></td>' +
+            '<td><input type="text" value="' + (s.key_phenomena || '') + '" style="width:120px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="key_phenomena"></td>' +
+            '<td><button onclick="removeStepRow(this)" style="background:none;border:none;color:#e74c3c;cursor:pointer">✕</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+function addStepRow() {
+    var tbody = document.getElementById('stepTableBody');
+    var tr = document.createElement('tr');
+    var idx = tbody.querySelectorAll('tr').length + 1;
+    tr.innerHTML = '<td style="text-align:center;font-weight:700">' + idx + '</td>' +
+        '<td><input type="number" style="width:60px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="section_start"></td>' +
+        '<td><input type="number" style="width:60px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="section_end"></td>' +
+        '<td><input type="number" style="width:70px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="target_temp"></td>' +
+        '<td><input type="text" style="width:160px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="operation_guide"></td>' +
+        '<td><input type="text" style="width:120px;padding:4px 6px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="key_phenomena"></td>' +
+        '<td><button onclick="removeStepRow(this)" style="background:none;border:none;color:#e74c3c;cursor:pointer">✕</button></td>';
+    tbody.appendChild(tr);
+}
+
+function removeStepRow(btn) {
+    var tbody = document.getElementById('stepTableBody');
+    if (tbody.querySelectorAll('tr').length <= 1) { alert('至少保留一个步骤'); return; }
+    btn.closest('tr').remove();
+    // 重新编号
+    tbody.querySelectorAll('tr').forEach(function(tr, i) {
+        tr.querySelector('td:first-child').textContent = i + 1;
+    });
+}
+
+function collectSteps() {
+    var tbody = document.getElementById('stepTableBody');
+    var steps = [];
+    tbody.querySelectorAll('tr').forEach(function(tr, idx) {
+        var inputs = tr.querySelectorAll('input');
+        var section_start = parseInt(inputs[0].value);
+        var section_end = parseInt(inputs[1].value);
+        var target_temp = parseFloat(inputs[2].value);
+        if (section_start && section_end && target_temp) {
+            steps.push({
+                step_order: idx + 1,
+                section_start: section_start,
+                section_end: section_end,
+                target_temp: target_temp,
+                operation_guide: inputs[3].value || '',
+                key_phenomena: inputs[4].value || ''
+            });
+        }
+    });
+    return steps;
+}
+
+function saveSteps() {
+    var steps = collectSteps();
+    if (steps.length === 0) { alert('请填写至少一个有效的步骤'); return; }
+    post('/api/process/' + currentProcessId + '/save-steps', { steps: steps }, function(r) {
+        if (r.success) { alert('步骤已保存'); }
+    });
+}
+
+function publishProcess(processId) {
+    var steps = collectSteps();
+    if (steps.length === 0) { alert('请先添加步骤'); return; }
+    post('/api/process/' + processId + '/publish', {}, function(r) {
+        if (r.success) { closeModal('stepModal'); location.reload(); }
+        else { alert(r.message); }
+    });
+}
+
+function unpublishProcess(processId) {
+    post('/api/process/' + processId + '/unpublish', {}, function(r) {
+        if (r.success) { closeModal('stepModal'); location.reload(); }
+        else { alert(r.message); }
+    });
+}
+
+function deleteProcess(processId) {
+    if (!confirm('确认删除该工艺？')) return;
+    post('/api/process/' + processId + '/delete', {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+</script>
+{% endblock %}

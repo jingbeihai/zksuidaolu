@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>中科恒泰 · 隧道炉生产可视化系统</title>
+<style>
+:root {
+  --bg-dark: #0a0e14;
+  --card-bg: #121a24;
+  --card-border: #2a3544;
+  --text-primary: #e8edf2;
+  --text-muted: #8b9cb3;
+  --accent-blue: #2980b9;
+  --accent-green: #22c55e;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-cyan: #06b6d4;
+  --bg-zone-low: rgba(34,197,94,0.12);
+  --bg-zone-mid: rgba(245,158,11,0.12);
+  --bg-zone-high: rgba(239,68,68,0.12);
+  --bg-zone-cool: rgba(96,165,250,0.12);
+  --txt-zone-low: #4ade80;
+  --txt-zone-mid: #fbbf24;
+  --txt-zone-high: #f87171;
+  --txt-zone-cool: #93c5fd;
+  --bg-empty: #1e2228;
+  --txt-empty: #555a62;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Microsoft YaHei', system-ui, sans-serif;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+}
+.tv-wrapper {
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  background: #000;
+}
+.tv-header {
+  background: linear-gradient(135deg, #0d1520, #162033);
+  padding: 1.2vh 2.5vw;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.tv-header .title { font-size: 2.2vh; font-weight: 700; color: var(--accent-cyan); letter-spacing: 2px; }
+.tv-header .sub { font-size: 1.4vh; color: var(--text-muted); margin-top: 2px; }
+.tv-header .clock { font-size: 3vh; font-weight: 700; color: var(--text-primary); font-family: 'Courier New', monospace; }
+.tv-header .sys-status { display: flex; align-items: center; gap: 6px; font-size: 1.5vh; color: var(--accent-green); }
+.tv-header .pulse-dot { width: 1.2vh; height: 1.2vh; border-radius: 50%; background: var(--accent-green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.tv-body { display: flex; flex: 1; overflow: hidden; }
+.left-panel { flex: 7; padding: 1.2vh 1.5vw; overflow-y: auto; border-right: 1px solid var(--card-border); }
+.right-panel { flex: 3; padding: 1.2vh 1.5vw; overflow-y: auto; background: rgba(10,14,20,0.4); }
+.furnace-section { margin-bottom: 1.5vh; }
+.furnace-title { display: flex; align-items: center; gap: 0.8vw; margin-bottom: 0.8vh; }
+.furnace-title h3 { font-size: 1.6vh; color: var(--text-primary); margin: 0; font-weight: 600; }
+.furnace-title .badge-foam { background: linear-gradient(135deg,#059669,#10b981); color: #fff; padding: 0.2vh 0.6vw; border-radius: 3px; font-size: 1.2vh; font-weight: 600; }
+.furnace-title .badge-cure { background: linear-gradient(135deg,#d97706,#f59e0b); color: #fff; padding: 0.2vh 0.6vw; border-radius: 3px; font-size: 1.2vh; font-weight: 600; }
+.furnace-title .badge-info-text { font-size: 1.4vh; color: var(--text-muted); margin-left: auto; }
+.section-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.section-cell {
+  width: 8.5vh; height: 10.5vh; border-radius: 0.6vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; background: var(--bg-empty); border: 1px solid #2a3038;
+  transition: all 0.3s; cursor: default; gap: 2px;
+}
+.section-cell .sec-num { font-size: 1.1vh; color: var(--txt-empty); position: absolute; top: 3px; left: 5px; }
+.section-cell .temp-val { font-size: 1.8vh; font-weight: 700; }
+.section-cell .temp-unit { font-size: 1.2vh; color: var(--txt-empty); }
+.section-cell.empty .temp-val { color: var(--txt-empty); }
+/* Occupied cell */
+.section-cell.occupied { border-width: 2px; }
+.section-cell.occupied .temp-val { font-size: 2vh; font-weight: 700; }
+.section-cell .batch-info-top { position: absolute; top: 2px; right: 5px; font-size: 1.3vh; font-weight: 700; padding: 0 4px; border-radius: 3px; line-height: 1.5; }
+.section-cell .batch-product { font-size: 1.4vh; font-weight: 600; text-align: center; line-height: 1.2; max-width: 7vh; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-cell .batch-progress-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; border-radius: 0 0 5px 5px; overflow: hidden; background: rgba(255,255,255,0.06); }
+.section-cell .batch-progress-bar .fill { height: 100%; border-radius: 0 0 5px 5px; transition: width 0.5s; }
+/* Zone colors */
+.section-cell.occupied.zone-low { background: linear-gradient(180deg,rgba(34,197,94,0.18),rgba(34,197,94,0.06)); border-color: rgba(34,197,94,0.4); }
+.section-cell.occupied.zone-low .temp-val,
+.section-cell.occupied.zone-low .temp-unit { color: var(--txt-zone-low); }
+.section-cell.occupied.zone-low .sec-num { color: rgba(74,222,128,0.5); }
+.section-cell.occupied.zone-low .batch-info-top { background: rgba(34,197,94,0.15); color: var(--txt-zone-low); }
+.section-cell.occupied.zone-low .batch-product { color: var(--txt-zone-low); }
+.section-cell.occupied.zone-low .batch-progress-bar .fill { background: var(--accent-green); }
+
+.section-cell.occupied.zone-mid { background: linear-gradient(180deg,rgba(245,158,11,0.18),rgba(245,158,11,0.06)); border-color: rgba(245,158,11,0.4); }
+.section-cell.occupied.zone-mid .temp-val,
+.section-cell.occupied.zone-mid .temp-unit { color: var(--txt-zone-mid); }
+.section-cell.occupied.zone-mid .sec-num { color: rgba(251,191,36,0.5); }
+.section-cell.occupied.zone-mid .batch-info-top { background: rgba(245,158,11,0.15); color: var(--txt-zone-mid); }
+.section-cell.occupied.zone-mid .batch-product { color: var(--txt-zone-mid); }
+.section-cell.occupied.zone-mid .batch-progress-bar .fill { background: var(--accent-orange); }
+
+.section-cell.occupied.zone-high { background: linear-gradient(180deg,rgba(239,68,68,0.18),rgba(239,68,68,0.06)); border-color: rgba(239,68,68,0.4); }
+.section-cell.occupied.zone-high .temp-val,
+.section-cell.occupied.zone-high .temp-unit { color: var(--txt-zone-high); }
+.section-cell.occupied.zone-high .sec-num { color: rgba(248,113,113,0.5); }
+.section-cell.occupied.zone-high .batch-info-top { background: rgba(239,68,68,0.15); color: var(--txt-zone-high); }
+.section-cell.occupied.zone-high .batch-product { color: var(--txt-zone-high); }
+.section-cell.occupied.zone-high .batch-progress-bar .fill { background: var(--accent-red); }
+
+.section-cell.occupied.zone-cool { background: linear-gradient(180deg,rgba(96,165,250,0.18),rgba(96,165,250,0.06)); border-color: rgba(96,165,250,0.4); }
+.section-cell.occupied.zone-cool .temp-val,
+.section-cell.occupied.zone-cool .temp-unit { color: var(--txt-zone-cool); }
+.section-cell.occupied.zone-cool .sec-num { color: rgba(147,197,253,0.5); }
+.section-cell.occupied.zone-cool .batch-info-top { background: rgba(96,165,250,0.15); color: var(--txt-zone-cool); }
+.section-cell.occupied.zone-cool .batch-product { color: var(--txt-zone-cool); }
+.section-cell.occupied.zone-cool .batch-progress-bar .fill { background: #60a5fa; }
+
+/* Batch glow */
+.section-cell.occupied.foam-batch { border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(6,182,212,0.3); animation: foam-glow 2s ease-in-out infinite; }
+@keyframes foam-glow { 0%,100% { box-shadow: 0 0 6px rgba(6,182,212,0.25); } 50% { box-shadow: 0 0 18px rgba(6,182,212,0.55); } }
+.section-cell.occupied.foam-batch .batch-info-top { background: rgba(6,182,212,0.2); color: var(--accent-cyan); }
+.section-cell.occupied.foam-batch .batch-product { color: var(--accent-cyan); }
+
+.section-cell.occupied.cure-batch { border-color: var(--accent-green); box-shadow: 0 0 10px rgba(34,197,94,0.3); animation: cure-glow 2.5s ease-in-out infinite; }
+@keyframes cure-glow { 0%,100% { box-shadow: 0 0 6px rgba(34,197,94,0.25); } 50% { box-shadow: 0 0 18px rgba(34,197,94,0.55); } }
+.section-cell.occupied.cure-batch .batch-info-top { background: rgba(34,197,94,0.2); color: var(--accent-green); }
+.section-cell.occupied.cure-batch .batch-product { color: var(--accent-green); }
+
+/* Zone bar */
+.zone-bar { display: flex; gap: 1.2vw; margin-top: 0.6vh; font-size: 1.2vh; color: var(--text-muted); }
+.zone-bar span { display: flex; align-items: center; gap: 4px; }
+.zone-bar .z-dot { width: 1.5vh; height: 1.5vh; border-radius: 3px; display: inline-block; }
+.zone-bar .z-dot.empty-dot { background: var(--bg-empty); border: 1px solid #2a3038; }
+
+/* Right panel */
+.right-panel h4 { font-size: 1.6vh; color: var(--text-primary); margin-bottom: 1.2vh; padding-bottom: 0.6vh; border-bottom: 1px solid var(--card-border); display: flex; align-items: center; gap: 0.6vw; }
+.right-panel h4 .count-badge { background: var(--accent-blue); color: #fff; font-size: 1.2vh; padding: 0.2vh 0.6vw; border-radius: 8px; font-weight: 600; }
+.schedule-list { display: flex; flex-direction: column; gap: 0.8vh; }
+.schedule-item { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 0.6vh; padding: 1vh 1.2vw; transition: all 0.2s; }
+.schedule-item:hover { border-color: rgba(6,182,212,0.4); }
+.schedule-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6vh; }
+.schedule-item .item-title { font-size: 1.4vh; font-weight: 700; color: var(--text-primary); }
+.schedule-item .item-status { font-size: 1.1vh; padding: 0.2vh 0.5vw; border-radius: 8px; font-weight: 600; }
+.schedule-item .item-status.pending { background: rgba(245,158,11,0.2); color: var(--accent-orange); }
+.schedule-item .item-status.ready { background: rgba(34,197,94,0.2); color: var(--accent-green); }
+.schedule-item .item-info { font-size: 1.2vh; color: var(--text-muted); line-height: 1.7; }
+.schedule-item .item-info .info-row { display: flex; gap: 1.2vw; }
+.schedule-item .item-info .info-row span { flex: 1; }
+.schedule-item .item-info .label-text { color: rgba(139,156,179,0.6); }
+.schedule-item.next-up { border-color: var(--accent-green); background: linear-gradient(135deg,rgba(34,197,94,0.08),rgba(34,197,94,0.02)); }
+.schedule-item.next-up .item-title { color: var(--accent-green); }
+.schedule-summary { display: flex; gap: 1.2vw; padding: 0.8vh 1vw; background: rgba(18,26,36,0.6); border-radius: 0.6vh; margin-top: 1vh; font-size: 1.2vh; color: var(--text-muted); }
+.schedule-summary .stat-item { display: flex; align-items: center; gap: 4px; }
+.schedule-summary .stat-num { font-size: 2vh; font-weight: 700; color: var(--text-primary); }
+
+/* Legend */
+.tv-legend { display: flex; gap: 1.5vw; padding: 0.6vh 1.5vw; background: rgba(18,26,36,0.6); border-top: 1px solid var(--card-border); font-size: 1.2vh; flex-wrap: wrap; flex-shrink: 0; }
+.tv-legend .legend-item { display: flex; align-items: center; gap: 4px; }
+.tv-legend .dot { width: 1vh; height: 1vh; border-radius: 50%; }
+
+/* Scrollbar */
+.left-panel::-webkit-scrollbar, .right-panel::-webkit-scrollbar { width: 4px; }
+.left-panel::-webkit-scrollbar-track, .right-panel::-webkit-scrollbar-track { background: transparent; }
+.left-panel::-webkit-scrollbar-thumb, .right-panel::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="tv-wrapper">
+  <div class="tv-header">
+    <div>
+      <div class="title">中科恒泰 · 隧道炉生产可视化系统</div>
+      <div class="sub">发泡炉 18节×16min &nbsp;|&nbsp; 固化炉 52节×16min</div>
+    </div>
+    <div class="sys-status"><span class="pulse-dot"></span> 系统运行中</div>
+    <div class="clock" id="clockDisplay">14:28:35</div>
+  </div>
+  <div class="tv-body">
+    <div class="left-panel">
+      <!-- 发泡炉 -->
+      <div class="furnace-section">
+        <div class="furnace-title">
+          <h3>🔥 发泡炉</h3>
+          <span class="badge-foam">运行中</span>
+          <span class="badge-info-text" id="foamInfo">P01 第6节 · ⏱ 192min剩余</span>
+        </div>
+        <div class="section-grid" id="foamGrid">
+          <!-- JS will generate -->
+        </div>
+      </div>
+      <!-- 固化炉 -->
+      <div class="furnace-section">
+        <div class="furnace-title">
+          <h3>⚗️ 固化炉</h3>
+          <span class="badge-cure">运行中</span>
+          <span class="badge-info-text" id="cureInfo">P02 第12节 · P03 第8节 · ⏱ 640min剩余</span>
+        </div>
+        <div class="section-grid" id="cureGrid">
+          <!-- JS will generate -->
+        </div>
+      </div>
+      <div class="zone-bar">
+        <span><span class="z-dot" style="background:var(--bg-zone-low);border:1px solid rgba(34,197,94,0.3)"></span> 低温</span>
+        <span><span class="z-dot" style="background:var(--bg-zone-mid);border:1px solid rgba(245,158,11,0.3)"></span> 中温</span>
+        <span><span class="z-dot" style="background:var(--bg-zone-high);border:1px solid rgba(239,68,68,0.3)"></span> 高温</span>
+        <span><span class="z-dot" style="background:var(--bg-zone-cool);border:1px solid rgba(96,165,250,0.3)"></span> 降温</span>
+        <span><span class="z-dot empty-dot"></span> 空白节拍</span>
+        <span style="margin-left:auto">每节拍 16min · 温度实时</span>
+      </div>
+    </div>
+    <div class="right-panel">
+      <h4>📋 待生产排产单 <span class="count-badge" id="queueCount">6</span></h4>
+      <div class="schedule-list" id="scheduleList">
+        <!-- JS will generate -->
+      </div>
+      <div class="schedule-summary" id="scheduleSummary">
+        <!-- JS will generate -->
+      </div>
+    </div>
+  </div>
+  <div class="tv-legend">
+    <div class="legend-item"><span class="dot" style="background:var(--bg-empty);border:1px solid #2a3038"></span> 空白节拍</div>
+    <div class="legend-item"><span class="dot" style="background:var(--accent-cyan)"></span> 发泡炉在产</div>
+    <div class="legend-item"><span class="dot" style="background:var(--accent-green)"></span> 固化炉在产</div>
+    <div class="legend-item"><span class="dot" style="background:rgba(239,68,68,0.3)"></span> 高温警戒</div>
+    <div class="legend-item">| 刷新间隔: 10秒</div>
+  </div>
+</div>
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clockDisplay').textContent =
+    now.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Demo data - simulate empty/occupied sections
+const foamSections = [
+  { order: 1, temp: 85, zone: 'low', hasProduct: false },
+  { order: 2, temp: 90, zone: 'low', hasProduct: false },
+  { order: 3, temp: 95, zone: 'low', hasProduct: false },
+  { order: 4, temp: 105, zone: 'low', hasProduct: false },
+  { order: 5, temp: 115, zone: 'mid', hasProduct: false },
+  { order: 6, temp: 140, zone: 'mid', hasProduct: true, batch: 'P01', product: '三元A型', progress: 60, batchType: 'foam' },
+  { order: 7, temp: 150, zone: 'mid', hasProduct: false },
+  { order: 8, temp: 160, zone: 'high', hasProduct: false },
+  { order: 9, temp: 168, zone: 'high', hasProduct: false },
+  { order: 10, temp: 172, zone: 'high', hasProduct: false },
+  { order: 11, temp: 175, zone: 'high', hasProduct: false },
+  { order: 12, temp: 175, zone: 'high', hasProduct: false },
+  { order: 13, temp: 172, zone: 'high', hasProduct: false },
+  { order: 14, temp: 160, zone: 'mid', hasProduct: false },
+  { order: 15, temp: 145, zone: 'cool', hasProduct: false },
+  { order: 16, temp: 120, zone: 'cool', hasProduct: false },
+  { order: 17, temp: 100, zone: 'cool', hasProduct: false },
+  { order: 18, temp: 85, zone: 'cool', hasProduct: false }
+];
+
+const cureSections = [];
+for (let i = 1; i <= 52; i++) {
+  let temp, zone;
+  if (i <= 4) { temp = 75 + i * 5; zone = 'low'; }
+  else if (i <= 9) { temp = 95 + (i - 4) * 10; zone = 'mid'; }
+  else if (i <= 19) { temp = 150 + (i - 9) * 2; zone = 'high'; }
+  else if (i <= 24) { temp = 168 - (i - 19) * 6; zone = 'mid'; }
+  else if (i <= 32) { temp = 125 - (i - 24) * 5; zone = 'cool'; }
+  else if (i <= 51) { temp = 82 - (i - 32) * 2; zone = 'low'; }
+  else { temp = 35; zone = 'cool'; }
+  
+  let hasProduct = false, batch, product, progress, batchType;
+  if (i === 8) { hasProduct = true; batch = 'P03'; product = '磷酸铁锂'; progress = 30; batchType = 'cure'; }
+  else if (i === 12) { hasProduct = true; batch = 'P02'; product = '三元B型'; progress = 45; batchType = 'cure'; }
+  
+  cureSections.push({ order: i, temp, zone, hasProduct, batch, product, progress, batchType });
+}
+
+function renderSections(containerId, sections) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = sections.map(s => {
+    let cls = 'section-cell';
+    if (s.hasProduct) {
+      cls += ` occupied ${s.zone} ${s.batchType}-batch`;
+    } else {
+      cls += ' empty';
+    }
+    return `<div class="${cls}">
+      <span class="sec-num"${s.hasProduct ? ' style="color:rgba(6,182,212,0.5)"' : ''}>${s.order}</span>
+      <span class="temp-val">${s.temp}°</span>
+      ${s.hasProduct ? `<div class="batch-info-top">${s.batch}</div>
+      <div class="batch-product">${s.product}</div>
+      <div class="batch-progress-bar"><div class="fill" style="width:${s.progress}%"></div></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+renderSections('foamGrid', foamSections);
+renderSections('cureGrid', cureSections);
+
+// Schedule queue demo data
+const scheduleData = [
+  { label: 'P04', product: '三元材料C型', batch: '20260617-004', qty: 500, furnace: '发泡炉', time: '14:45', status: 'ready' },
+  { label: 'P05', product: '磷酸铁锂B型', batch: '20260617-005', qty: 800, furnace: '固化炉', time: '15:30', status: 'pending' },
+  { label: 'P06', product: '三元材料A型', batch: '20260617-006', qty: 600, furnace: '发泡炉', time: '16:00', status: 'pending' },
+  { label: 'P07', product: '钠离子A型', batch: '20260617-007', qty: 400, furnace: '固化炉', time: '17:20', status: 'pending' },
+  { label: 'P08', product: '三元材料B型', batch: '20260617-008', qty: 750, furnace: '发泡炉', time: '18:00', status: 'pending' },
+  { label: 'P09', product: '磷酸铁锂C型', batch: '20260617-009', qty: 900, furnace: '固化炉', time: '19:10', status: 'pending' }
+];
+
+function renderSchedule() {
+  const list = document.getElementById('scheduleList');
+  list.innerHTML = scheduleData.map((s, i) => {
+    const isReady = s.status === 'ready';
+    return `<div class="schedule-item${isReady ? ' next-up' : ''}">
+      <div class="item-header">
+        <span class="item-title">${s.label} · ${s.product}</span>
+        <span class="item-status ${s.status}">${isReady ? '即将生产' : '等待'}</span>
+      </div>
+      <div class="item-info">
+        <div class="info-row">
+          <span><span class="label-text">批号</span> ${s.batch}</span>
+          <span><span class="label-text">数量</span> ${s.qty}件</span>
+        </div>
+        <div class="info-row">
+          <span><span class="label-text">生产炉</span> ${s.furnace}</span>
+          <span><span class="label-text">预定时间</span> ${s.time}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  
+  const totalQty = scheduleData.reduce((a, b) => a + b.qty, 0);
+  document.getElementById('scheduleSummary').innerHTML = `
+    <div class="stat-item"><span class="stat-num">${scheduleData.length}</span> 待生产</div>
+    <div class="stat-item"><span class="stat-num">${totalQty}</span> 总件数</div>
+    <div class="stat-item"><span class="stat-num">2</span> 生产中</div>
+    <div class="stat-item" style="margin-left:auto">⏱ 预计完成: 明日 08:30</div>`;
+  document.getElementById('queueCount').textContent = scheduleData.length;
+}
+renderSchedule();
+</script>
+</body>
+</html>

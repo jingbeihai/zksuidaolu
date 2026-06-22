@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ app_title }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/flat.css?v={{ static_version }}">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+{% if request.session.user %}
+{% include "nav.html" %}
+{% endif %}
+<div class="main-content">
+  {% block content %}{% endblock %}
+</div>
+<script src="/static/js/common.js?v={{ static_version }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

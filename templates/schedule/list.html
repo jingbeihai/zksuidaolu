@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}排产管理 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>排产管理</h2>
+  <div class="header-right">
+    <span class="breadcrumb">首页 / 排产管理</span>
+    <a href="/schedule/create/" class="btn btn-primary">+ 新建排产单</a>
+  </div>
+</div>
+
+<div class="page-card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>排产单号</th>
+        <th>产品</th>
+        <th>工艺</th>
+        <th>批号</th>
+        <th>数量</th>
+        <th>炉型</th>
+        <th>计划时间</th>
+        <th>状态</th>
+        <th style="width:100px">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if orders %}
+      {% for o in orders %}
+      <tr>
+        <td><strong>{{ o.order_no }}</strong></td>
+        <td>{{ o.product_name }}</td>
+        <td style="font-size:13px;color:#7f8c8d">{{ o.process_name }}</td>
+        <td>{{ o.batch_no }}</td>
+        <td>{{ o.quantity }}</td>
+        <td>{{ o.furnace_name or '-' }}</td>
+        <td style="font-size:13px;color:#7f8c8d">{{ o.scheduled_time.strftime('%Y-%m-%d %H:%M') if o.scheduled_time else '-' }}</td>
+        <td>
+          {% set status_map = {'pending': '待生产', 'in_production': '生产中', 'completed': '已完成', 'cancelled': '已取消'} %}
+          {% set color_map = {'pending': 'badge-info', 'in_production': 'badge-running', 'completed': 'badge-success', 'cancelled': 'badge-danger'} %}
+          <span class="badge {{ color_map.get(o.status, 'badge-info') }}">{{ status_map.get(o.status, o.status) }}</span>
+        </td>
+        <td>
+          {% if o.status == 'pending' %}
+          <button class="btn btn-sm btn-danger" onclick="cancelOrder({{ o.id }})">取消</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="9" style="text-align:center;color:#bdc3c7;padding:40px">
+          暂无排产单<br>
+          <a href="/schedule/create/" class="btn btn-primary btn-sm" style="margin-top:12px">+ 新建排产单</a>
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function cancelOrder(orderId) {
+    if (!confirm('确认取消该排产单？')) return;
+    post('/api/schedule/order/' + orderId + '/cancel', {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+</script>
+{% endblock %}

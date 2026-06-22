@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中科恒泰 · 隧道炉生产可视化</title>
+<style>
+:root {
+  --bg: #0a0e14;
+  --panel: #121a24;
+  --border: #2a3544;
+  --text: #e8edf2;
+  --muted: #8b9cb3;
+  --green: #22c55e;
+  --orange: #f59e0b;
+  --cyan: #06b6d4;
+  --blue: #60a5fa;
+  /* 发泡炉：保留 D 方案底色 */
+  --bg-empty-foam: #1e2938;
+  --bd-empty-foam: rgba(34, 197, 94, 0.16);
+  --join-foam: rgba(34, 197, 94, 0.38);
+  --foam-tint: rgba(34, 197, 94, 0.12);
+  --foam-border: rgba(74, 222, 128, 0.28);
+  /* 固化炉：标题青色减淡 */
+  --bg-empty-cure: #1a3642;
+  --bg-empty-cure: color-mix(in srgb, var(--cyan) 14%, #151d28);
+  --bd-empty-cure: rgba(6, 182, 212, 0.26);
+  --join-cure: rgba(6, 182, 212, 0.42);
+  --cure-tint: rgba(6, 182, 212, 0.15);
+  --cure-border: rgba(6, 182, 212, 0.34);
+  --bg-blank: #151d28;
+  --bd-blank: rgba(100, 116, 139, 0.55);
+  --bg-act-low: rgba(34, 197, 94, 0.32);
+  --bd-act-low: rgba(74, 222, 128, 0.62);
+  --bg-act-mid: rgba(234, 179, 8, 0.32);
+  --bd-act-mid: rgba(250, 204, 21, 0.62);
+  --bg-act-high: rgba(239, 68, 68, 0.32);
+  --bd-act-high: rgba(248, 113, 113, 0.62);
+  --bg-act-cool: rgba(59, 130, 246, 0.32);
+  --bd-act-cool: rgba(96, 165, 250, 0.62);
+  --legend-active: rgba(34, 197, 94, 0.40);
+  --legend-active-bd: rgba(74, 222, 128, 0.68);
+  --c-num: #64748b;
+  --c-temp: #facc15;
+  --c-unit: #fde047;
+  --c-batch: #4ade80;
+  --c-product: #f1f5f9;
+  --c-process: #60a5fa;
+  --c-empty-temp: #64748b;
+  --c-blank-label: #475569;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #000; color: var(--text); }
+.viewport { width: 1920px; height: 1080px; background: var(--bg); display: flex; flex-direction: column; transform-origin: top left; }
+.header { height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.header .title { font-size: 20px; font-weight: 700; letter-spacing: 2px; color: var(--cyan); }
+.header .clock { font-size: 18px; font-family: "Courier New", monospace; }
+.header .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 8px; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.main { flex: 1; display: flex; min-height: 0; }
+.left { flex: 7; display: flex; flex-direction: column; padding: 8px 12px; min-width: 0; border-right: 1px solid var(--border); }
+
+.tunnel-head {
+  display: flex; align-items: center; gap: 16px; height: 32px; margin-bottom: 6px; flex-shrink: 0;
+}
+.tunnel-head .legend { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.tunnel-head .legend .dot-foam { width: 12px; height: 12px; border-radius: 2px; background: var(--foam-tint); border: 1px solid var(--foam-border); }
+.tunnel-head .legend .dot-cure { width: 12px; height: 12px; border-radius: 2px; background: var(--cure-tint); border: 1px solid var(--cure-border); }
+.tunnel-head .legend .dot-empty { width: 12px; height: 12px; border-radius: 2px; background: var(--bg-empty-foam); border: 1px solid var(--bd-empty-foam); }
+.tunnel-head .legend .dot-blank { width: 12px; height: 12px; border-radius: 2px; background: var(--bg-blank); border: 1px dashed var(--bd-blank); }
+.tunnel-head .legend .dot-active { width: 12px; height: 12px; border-radius: 2px; background: var(--legend-active); border: 1px solid var(--legend-active-bd); }
+.tunnel-head .meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+.tag-run { font-size: 10px; padding: 1px 8px; border-radius: 3px; background: rgba(34,197,94,.2); color: var(--green); border: 1px solid rgba(34,197,94,.4); }
+.tag-paused { font-size: 10px; padding: 1px 8px; border-radius: 3px; background: rgba(245,158,11,.2); color: var(--orange); border: 1px solid rgba(245,158,11,.4); }
+.tag-idle { font-size: 10px; padding: 1px 8px; border-radius: 3px; background: rgba(100,116,139,.2); color: var(--muted); border: 1px solid rgba(100,116,139,.4); }
+
+.tunnel-wrap {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
+  background: rgba(18, 26, 36, 0.6); padding: 8px;
+}
+.tunnel-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(14, 1fr);
+  grid-auto-rows: minmax(0, 1fr); gap: 4px; min-height: 0;
+}
+
+.cell {
+  min-width: 0; min-height: 0; border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; overflow: hidden; padding: 2px 4px;
+}
+/* 状态1：空闲（无产品，显示设定温度） */
+.cell.zone-foam:not(.active):not(.blank) { background: var(--bg-empty-foam); border-color: var(--bd-empty-foam); }
+.cell.zone-cure:not(.active):not(.blank) { background: var(--bg-empty-cure); border-color: var(--bd-empty-cure); }
+.cell.zone-foam.last-foam { box-shadow: inset -2px 0 0 var(--join-foam); }
+.cell.zone-cure.first-cure { box-shadow: inset 2px 0 0 var(--join-cure); }
+
+/* 状态2：空白插入节拍 */
+.cell.blank {
+  background: var(--bg-blank);
+  border: 1px dashed var(--bd-blank);
+}
+.cell.blank .blank-label {
+  font-size: 15px; font-weight: 700; color: var(--c-blank-label);
+  letter-spacing: 2px; margin-top: 2px;
+}
+
+/* 放大字体 */
+.cell .num { position: absolute; top: 3px; left: 5px; font-size: 13px; color: var(--c-num); font-weight: 700; }
+.cell .temp { font-size: 22px; font-weight: 800; line-height: 1; color: var(--c-empty-temp); }
+.cell .unit { font-size: 12px; color: var(--c-empty-temp); margin-top: 1px; }
+
+.cell.active { border-width: 2px; animation: cellPulse 2.5s ease-in-out infinite; }
+@keyframes cellPulse { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.06)} }
+
+.cell.active .temp { font-size: 26px; color: var(--c-temp); }
+.cell.active .unit { font-size: 13px; color: var(--c-unit); font-weight: 600; }
+.cell.active .batch {
+  font-size: 14px; font-weight: 800; margin-top: 4px; color: var(--c-batch);
+  max-width: 96%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cell.active .product {
+  font-size: 13px; font-weight: 600; margin-top: 2px; color: var(--c-product);
+  max-width: 96%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cell.active .process {
+  font-size: 11px; margin-top: 1px; color: var(--c-process); font-weight: 500;
+  max-width: 96%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cell.active .bar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(0,0,0,.2); }
+.cell.active .bar i { display: block; height: 100%; background: var(--c-temp); opacity: 0.6; animation: barRun var(--bar-duration, 16s) linear infinite; }
+
+/* 状态3：有产品（按温区着色，底色随主题联动） */
+.cell.active.zone-low  { background: var(--bg-act-low);  border-color: var(--bd-act-low); }
+.cell.active.zone-mid  { background: var(--bg-act-mid);  border-color: var(--bd-act-mid); }
+.cell.active.zone-high { background: var(--bg-act-high); border-color: var(--bd-act-high); }
+.cell.active.zone-cool { background: var(--bg-act-cool); border-color: var(--bd-act-cool); }
+
+.right { flex: 3; display: flex; flex-direction: column; padding: 10px 12px; min-width: 0; background: rgba(10,14,20,.5); }
+.right-head { font-size: 15px; font-weight: 700; color: var(--cyan); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+.right-head span { font-size: 12px; color: var(--muted); font-weight: 400; }
+.schedule-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.sched-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; gap: 12px; align-items: center; }
+.sched-card.first { border-left: 3px solid var(--cyan); }
+.sched-card .info { flex: 1; min-width: 0; }
+.sched-card .info .prod { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.sched-card .info .sub { font-size: 11px; color: var(--muted); }
+.sched-card .info .time { font-size: 11px; color: var(--blue); margin-top: 2px; }
+.sched-card .qty-box { text-align: center; flex-shrink: 0; min-width: 72px; }
+.sched-card .qty-box .big { font-size: 32px; font-weight: 800; line-height: 1; font-family: "Courier New", monospace; color: var(--orange); }
+.sched-card .qty-box .big span { font-size: 20px; color: var(--muted); font-weight: 600; }
+.sched-card .qty-box .hint { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.sched-card .qty-box .hint em { color: var(--green); font-style: normal; font-weight: 600; }
+
+.status-bar {
+  height: 28px; flex-shrink: 0; background: rgba(6,182,212,.06);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--muted);
+}
+.status-bar .ok { color: var(--green); }
+.status-bar .err { color: #f87171; }
+
+@keyframes barRun { from{width:0} to{width:100%} }
+</style>
+</head>
+<body>
+<div class="viewport" id="vp">
+  <div class="header">
+    <div class="title">中科恒泰 · 隧道炉生产可视化</div>
+    <div class="clock"><span class="dot"></span><span id="clk">--:--:--</span></div>
+  </div>
+  <div class="main">
+    <div class="left">
+      <div class="tunnel-head">
+        <span class="tag-run" id="runTag">加载中</span>
+        <div class="legend"><span class="dot-foam"></span>发泡 1-18</div>
+        <div class="legend"><span class="dot-cure"></span>固化 19-70</div>
+        <div class="legend"><span class="dot-empty"></span>空闲</div>
+        <div class="legend"><span class="dot-blank"></span>空白</div>
+        <div class="legend"><span class="dot-active"></span>有产品</div>
+        <span class="meta">发泡绿调 / 固化青调</span>
+      </div>
+      <div class="tunnel-wrap">
+        <div class="tunnel-grid" id="tunnelGrid"></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="right-head">待生产排产单 <span id="schedCount">--</span></div>
+      <div class="schedule-list" id="schedList"></div>
+    </div>
+  </div>
+  <div class="status-bar"><span id="syncStatus">正在连接...</span></div>
+</div>
+<script>
+var POLL_MS = 5000;
+var foamCount = 18;
+
+function scaleViewport() {
+  var vp = document.getElementById('vp');
+  var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  vp.style.transform = 'scale(' + s + ')';
+}
+window.addEventListener('resize', scaleViewport);
+window.addEventListener('load', scaleViewport);
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function zoneClass(t) {
+  return t < 60 ? 'zone-low' : t < 120 ? 'zone-mid' : t < 200 ? 'zone-high' : 'zone-cool';
+}
+
+function renderCell(d) {
+  var zone = d.zone;
+  var extra = '';
+  if (d.order === foamCount) extra = ' last-foam';
+  if (d.order === foamCount + 1) extra = ' first-cure';
+  if (d.blank) {
+    return '<div class="cell zone-' + zone + extra + ' blank"><span class="num">#' + d.order + '</span><div class="blank-label">空白</div></div>';
+  }
+  var batch = d.batch;
+  var temp = d.temp;
+  var cls = 'cell zone-' + zone + extra;
+  if (batch) cls += ' active ' + zoneClass(batch.temp != null ? batch.temp : (temp || 0));
+  var h = '<div class="' + cls + '"><span class="num">#' + d.order + '</span>';
+  if (batch) {
+    h += '<div class="temp">' + esc(batch.temp) + '<span class="unit">°C</span></div>';
+    h += '<div class="batch">' + esc(batch.label) + '</div>';
+    h += '<div class="product">' + esc(batch.product) + '</div>';
+    h += '<div class="process">' + esc(batch.process) + '</div>';
+    h += '<div class="bar"><i></i></div>';
+  } else {
+    h += '<div class="temp">' + (temp != null ? esc(temp) : '--') + '</div><div class="unit">°C</div>';
+  }
+  return h + '</div>';
+}
+
+function renderSchedules(list) {
+  if (!list.length) {
+    return '<div class="sched-card"><div class="info"><div class="prod" style="color:var(--muted)">暂无待生产排产单</div></div></div>';
+  }
+  return list.map(function(s, k) {
+    return '<div class="sched-card' + (k === 0 ? ' first' : '') + '">' +
+      '<div class="info"><div class="prod">' + esc(s.product) + '</div>' +
+      '<div class="sub">' + esc(s.order) + ' · ' + esc(s.batch) + '</div>' +
+      '<div class="time">计划 ' + esc(s.time) + '</div></div>' +
+      '<div class="qty-box"><div class="big">' + s.waiting + '<span>/</span>' + s.total + '</div>' +
+      '<div class="hint">待入炉 · 已入 <em>' + s.in_furnace + '</em></div></div></div>';
+  }).join('');
+}
+
+function setRunTag(status) {
+  var el = document.getElementById('runTag');
+  if (status === 'running') {
+    el.className = 'tag-run';
+    el.textContent = '运行中';
+  } else if (status === 'paused') {
+    el.className = 'tag-paused';
+    el.textContent = '已暂停';
+  } else {
+    el.className = 'tag-idle';
+    el.textContent = '待机';
+  }
+}
+
+function applyData(data) {
+  foamCount = data.foam_count || 18;
+  var grid = document.getElementById('tunnelGrid');
+  grid.style.setProperty('--bar-duration', (data.section_minutes || 16) + 's');
+  grid.innerHTML = (data.cells || []).map(renderCell).join('');
+  document.getElementById('schedList').innerHTML = renderSchedules(data.schedules || []);
+  document.getElementById('schedCount').textContent = '共 ' + (data.schedules || []).length + ' 单';
+  setRunTag(data.status || 'idle');
+  var now = new Date();
+  var ts = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
+  document.getElementById('syncStatus').innerHTML = '<span class="ok">●</span> 数据已同步 ' + ts;
+}
+
+function loadData() {
+  fetch('/api/tv/data')
+    .then(function(r) { return r.json(); })
+    .then(function(data) { applyData(data); })
+    .catch(function() {
+      document.getElementById('syncStatus').innerHTML = '<span class="err">●</span> 数据加载失败，' + POLL_MS / 1000 + ' 秒后重试';
+    });
+}
+
+loadData();
+setInterval(loadData, POLL_MS);
+function tick(){ var n=new Date(); document.getElementById('clk').textContent=('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2)+':'+('0'+n.getSeconds()).slice(-2); }
+tick(); setInterval(tick,1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}设备管理 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>设备管理</h2>
+  <div class="breadcrumb">首页 / 设备管理</div>
+</div>
+
+{% for f in furnaces %}
+<div class="page-card" style="margin-bottom:20px">
+  <div class="card-title">
+    <span>{{ f.name }}（{{ f.code }}）</span>
+    <div>
+      <span class="badge badge-{{ 'running' if f.sections else 'idle' }}" style="margin-right:8px">
+        {{ f.section_count }}节 · 每节{{ f.section_minutes }}分钟
+      </span>
+      <button class="btn btn-primary btn-sm" onclick="editTemp({{ f.id }}, '{{ f.name }}')">编辑温度</button>
+    </div>
+  </div>
+
+  <!-- 节拍温度概览 -->
+  <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">
+    {% for s in f.sections %}
+    <div style="width:52px;height:58px;border:1px solid #d5dbdf;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8f9fa;font-size:11px">
+      <div style="font-size:9px;color:#7f8c8d">{{ s.section_order }}</div>
+      <div style="font-size:13px;font-weight:700;color:#2980b9">
+        {% set ns = namespace(found=false) %}
+        {% for t in f.temp_settings %}
+          {% if t.section_id == s.id and t.is_active %}
+            {{ t.target_temp }}°
+            {% set ns.found = true %}
+          {% endif %}
+        {% endfor %}
+        {% if not ns.found %}--°{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- 区间温度设置概览（去重） -->
+  {% set seen_zones = [] %}
+  {% set zones_unique = [] %}
+  {% for z in f.temp_settings if z.zone_start %}
+    {% set key = z.zone_start ~ '-' ~ z.zone_end ~ '-' ~ z.target_temp %}
+    {% if key not in seen_zones %}
+      {% set _ = seen_zones.append(key) %}
+      {% set _ = zones_unique.append(z) %}
+    {% endif %}
+  {% endfor %}
+  {% if zones_unique %}
+  <div style="font-size:13px;color:#7f8c8d;margin-top:8px">
+    <strong>阶段升温设置：</strong>
+    {% for z in zones_unique %}
+    <span style="display:inline-block;margin-right:16px">
+      {{ z.zone_name or ('第' ~ z.zone_start ~ '-' ~ z.zone_end ~ '节') }}: {{ z.target_temp }}°
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<!-- 温度编辑弹窗 -->
+<div id="tempModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:800px;max-height:80vh;overflow:auto;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 id="modalTitle" style="color:#1a5276;font-size:18px">编辑温度</h3>
+      <button onclick="closeModal()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px">设置模式</label>
+      <select id="tempMode" onchange="toggleTempMode()" style="padding:8px 12px;border:1px solid #d5dbdf;border-radius:4px;font-size:14px">
+        <option value="section">独立节拍设置</option>
+        <option value="zone">阶段区间设置</option>
+      </select>
+    </div>
+
+    <!-- 独立节拍模式 -->
+    <div id="sectionMode">
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="sectionTempGrid">
+        <!-- JS动态生成 -->
+      </div>
+    </div>
+
+    <!-- 区间模式 -->
+    <div id="zoneMode" style="display:none">
+      <div style="margin-bottom:12px;font-size:13px;color:#7f8c8d">按阶段设置统一温度，例如预热区1-5节 → 100°C</div>
+      <div id="zoneList">
+        <!-- JS动态生成 -->
+      </div>
+      <button class="btn btn-sm" onclick="addZone()" style="margin-top:8px">+ 添加区间</button>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #d5dbdf">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveTemp()">保存温度设置</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var currentFurnaceId = null;
+var currentSections = [];
+
+function editTemp(furnaceId, furnaceName) {
+    currentFurnaceId = furnaceId;
+    document.getElementById('modalTitle').textContent = furnaceName + ' - 温度设置';
+    
+    get('/api/device/furnace/' + furnaceId + '/temp', function(data) {
+        currentSections = data.sections;
+        renderSectionTemps(data.settings);
+        renderZoneTemps(data.settings);
+        document.getElementById('tempModal').style.display = 'flex';
+    });
+}
+
+function closeModal() {
+    document.getElementById('tempModal').style.display = 'none';
+}
+
+function toggleTempMode() {
+    var mode = document.getElementById('tempMode').value;
+    document.getElementById('sectionMode').style.display = mode === 'section' ? 'block' : 'none';
+    document.getElementById('zoneMode').style.display = mode === 'zone' ? 'block' : 'none';
+}
+
+function renderSectionTemps(settings) {
+    var grid = document.getElementById('sectionTempGrid');
+    var html = '';
+    for (var i = 0; i < currentSections.length; i++) {
+        var s = currentSections[i];
+        var matched = null;
+        for (var j = 0; j < settings.length; j++) {
+            if (settings[j].section_id === s.id && settings[j].is_active) {
+                matched = settings[j];
+                break;
+            }
+        }
+        var val = matched ? matched.target_temp : '';
+        html += '<div style="width:56px;text-align:center;margin-bottom:8px">';
+        html += '  <div style="font-size:10px;color:#7f8c8d;margin-bottom:2px">第' + s.section_order + '节</div>';
+        html += '  <input type="number" data-section-id="' + s.id + '" data-section-order="' + s.section_order + '" value="' + val + '" style="width:52px;padding:4px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" placeholder="--">';
+        html += '</div>';
+    }
+    grid.innerHTML = html;
+}
+
+function renderZoneTemps(settings) {
+    var zones = [];
+    var seen = {};
+    for (var i = 0; i < settings.length; i++) {
+        if (settings[i].zone_start) {
+            var key = settings[i].zone_start + '-' + settings[i].zone_end + '-' + settings[i].target_temp;
+            if (!seen[key]) {
+                seen[key] = true;
+                zones.push(settings[i]);
+            }
+        }
+    }
+    var list = document.getElementById('zoneList');
+    if (zones.length === 0) {
+        zones = [{ zone_start: 1, zone_end: currentSections.length, target_temp: '', zone_name: '全段' }];
+    }
+    list.innerHTML = zones.map(function(z, idx) {
+        return '<div class="zone-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
+            '<input type="text" value="' + (z.zone_name || '') + '" placeholder="区间名称" style="width:100px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="zone_name" data-idx="' + idx + '">' +
+            '<span style="color:#7f8c8d;font-size:13px">第</span>' +
+            '<input type="number" value="' + z.zone_start + '" style="width:50px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="zone_start" data-idx="' + idx + '">' +
+            '<span style="color:#7f8c8d;font-size:13px">-</span>' +
+            '<input type="number" value="' + z.zone_end + '" style="width:50px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="zone_end" data-idx="' + idx + '">' +
+            '<span style="color:#7f8c8d;font-size:13px">节 温度</span>' +
+            '<input type="number" value="' + z.target_temp + '" style="width:60px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="target_temp" data-idx="' + idx + '">' +
+            '<span style="color:#7f8c8d;font-size:13px">°C</span>' +
+            '<button onclick="removeZone(this)" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:16px">✕</button>' +
+            '</div>';
+    }).join('');
+}
+
+function addZone() {
+    var list = document.getElementById('zoneList');
+    var idx = list.querySelectorAll('.zone-row').length;
+    var div = document.createElement('div');
+    div.className = 'zone-row';
+    div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+    div.innerHTML = 
+        '<input type="text" value="" placeholder="区间名称" style="width:100px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;font-size:13px" data-field="zone_name" data-idx="' + idx + '">' +
+        '<span style="color:#7f8c8d;font-size:13px">第</span>' +
+        '<input type="number" value="" style="width:50px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="zone_start" data-idx="' + idx + '">' +
+        '<span style="color:#7f8c8d;font-size:13px">-</span>' +
+        '<input type="number" value="" style="width:50px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="zone_end" data-idx="' + idx + '">' +
+        '<span style="color:#7f8c8d;font-size:13px">节 温度</span>' +
+        '<input type="number" value="" style="width:60px;padding:6px 8px;border:1px solid #d5dbdf;border-radius:3px;text-align:center;font-size:13px" data-field="target_temp" data-idx="' + idx + '">' +
+        '<span style="color:#7f8c8d;font-size:13px">°C</span>' +
+        '<button onclick="removeZone(this)" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:16px">✕</button>';
+    list.appendChild(div);
+}
+
+function removeZone(btn) {
+    btn.parentElement.remove();
+}
+
+function saveTemp() {
+    var mode = document.getElementById('tempMode').value;
+    var settings = [];
+    
+    if (mode === 'section') {
+        var inputs = document.querySelectorAll('#sectionTempGrid input[type="number"]');
+        for (var i = 0; i < inputs.length; i++) {
+            var val = inputs[i].value;
+            if (val) {
+                settings.push({
+                    section_id: parseInt(inputs[i].dataset.sectionId),
+                    target_temp: parseFloat(val),
+                    zone_start: null,
+                    zone_end: null,
+                    zone_name: null
+                });
+            }
+        }
+    } else {
+        var rows = document.querySelectorAll('#zoneList .zone-row');
+        for (var i = 0; i < rows.length; i++) {
+            var inputs_row = rows[i].querySelectorAll('input');
+            var zone_name = inputs_row[0].value;
+            var zone_start = parseInt(inputs_row[1].value);
+            var zone_end = parseInt(inputs_row[2].value);
+            var target_temp = parseFloat(inputs_row[3].value);
+            if (zone_start && zone_end && target_temp) {
+                settings.push({
+                    section_id: null,
+                    target_temp: target_temp,
+                    zone_start: zone_start,
+                    zone_end: zone_end,
+                    zone_name: zone_name || null
+                });
+            }
+        }
+    }
+    
+    post('/api/device/furnace/' + currentFurnaceId + '/temp', { settings: settings }, function(resp) {
+        if (resp.success) {
+            closeModal();
+            location.reload();
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}新建排产单 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>新建排产单</h2>
+  <div class="breadcrumb">首页 / <a href="/schedule/">排产管理</a> / 新建</div>
+</div>
+
+<div class="page-card" style="max-width:700px">
+  <form id="createForm" onsubmit="return false">
+    <div class="form-row">
+      <div class="form-group">
+        <label>产品 *</label>
+        <select id="productSelect" onchange="onProductChange()" required>
+          <option value="">-- 请选择产品 --</option>
+          {% for p in products %}
+          <option value="{{ p.id }}">{{ p.name }} ({{ p.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>已发布工艺 *</label>
+        <select id="processSelect" required>
+          <option value="">-- 请先选择产品 --</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>批号 *</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="batchNo" placeholder="例如: B0617-001" style="flex:1">
+          <button type="button" class="btn btn-sm" onclick="autoBatchNo()" title="自动生成">生成</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>生产数量 (件) *</label>
+        <input type="number" id="quantity" placeholder="0" min="1">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>指定炉型</label>
+        <select id="furnaceSelect">
+          <option value="">-- 自动分配 --</option>
+          {% for f in furnaces %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>空白节拍数</label>
+        <input type="number" id="blankSections" value="0" min="0">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>计划生产时间 *</label>
+      <input type="datetime-local" id="scheduledTime" required>
+    </div>
+
+    <div class="form-group">
+      <label>备注</label>
+      <textarea id="notes" rows="2" placeholder="可选备注信息"></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:16px;border-top:1px solid #ecf0f1">
+      <a href="/schedule/" class="btn">取消</a>
+      <button type="submit" class="btn btn-primary" onclick="submitOrder()">创建排产单</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function onProductChange() {
+    var productId = document.getElementById('productSelect').value;
+    var sel = document.getElementById('processSelect');
+    sel.innerHTML = '<option value="">-- 加载中... --</option>';
+    if (!productId) {
+        sel.innerHTML = '<option value="">-- 请先选择产品 --</option>';
+        return;
+    }
+    get('/api/schedule/product/' + productId + '/processes', function(data) {
+        sel.innerHTML = '<option value="">-- 请选择工艺 --</option>';
+        if (data.processes.length === 0) {
+            sel.innerHTML = '<option value="">-- 该产品无已发布工艺 --</option>';
+        }
+        for (var i = 0; i < data.processes.length; i++) {
+            var p = data.processes[i];
+            var opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.process_name + ' v' + p.version_no;
+            sel.appendChild(opt);
+        }
+    });
+}
+
+function autoBatchNo() {
+    var now = new Date();
+    var m = ('0' + (now.getMonth() + 1)).slice(-2);
+    var d = ('0' + now.getDate()).slice(-2);
+    document.getElementById('batchNo').value = 'B' + m + d + '-001';
+}
+
+function submitOrder() {
+    var productId = document.getElementById('productSelect').value;
+    var processId = document.getElementById('processSelect').value;
+    var batchNo = document.getElementById('batchNo').value.trim();
+    var quantity = parseInt(document.getElementById('quantity').value);
+    var furnaceId = document.getElementById('furnaceSelect').value;
+    var blankSections = parseInt(document.getElementById('blankSections').value) || 0;
+    var scheduledTime = document.getElementById('scheduledTime').value;
+    var notes = document.getElementById('notes').value.trim();
+
+    if (!productId) { alert('请选择产品'); return; }
+    if (!processId) { alert('请选择工艺'); return; }
+    if (!batchNo) { alert('请输入批号'); return; }
+    if (!quantity || quantity <= 0) { alert('请输入有效的生产数量'); return; }
+    if (!scheduledTime) { alert('请选择计划生产时间'); return; }
+
+    post('/api/schedule/order/create', {
+        product_id: parseInt(productId),
+        process_id: parseInt(processId),
+        batch_no: batchNo,
+        quantity: quantity,
+        blank_sections: blankSections,
+        scheduled_time: scheduledTime + ':00',
+        furnace_id: furnaceId ? parseInt(furnaceId) : null
+    }, function(r) {
+        if (r.success) {
+            location.href = '/schedule/';
+        } else {
+            alert('创建失败: ' + (r.message || '未知错误'));
+        }
+    });
+}
+
+// 自动填充默认值
+(function() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = ('0' + (now.getMonth() + 1)).slice(-2);
+    var d = ('0' + now.getDate()).slice(-2);
+    var h = ('0' + now.getHours()).slice(-2);
+    var min = ('0' + (now.getMinutes() + 30)).slice(-2);
+    document.getElementById('scheduledTime').value = y + '-' + m + '-' + d + 'T' + h + ':' + min;
+    autoBatchNo();
+})();
+</script>
+{% endblock %}

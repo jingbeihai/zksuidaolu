@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}新建工艺组合 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>新建产品工艺组合</h2>
+  <div class="breadcrumb">首页 / <a href="/process/">工艺管理</a> / 新建</div>
+</div>
+
+<div class="page-card" style="max-width:600px">
+  <form id="createForm" onsubmit="return false">
+    <div class="form-group">
+      <label>产品名称 *</label>
+      <input type="text" id="prodName" class="" placeholder="例如: 三元乙丙密封条" required>
+    </div>
+
+    <div class="form-group">
+      <label>工艺编号 *</label>
+      <input type="text" id="processCode" class="" placeholder="例如: EPDM-Sulfur-001">
+    </div>
+
+    <div class="form-group">
+      <label>工艺版本 *</label>
+      <input type="text" id="processVersion" class="" placeholder="例如: V1.0">
+    </div>
+
+    <div class="form-group">
+      <label>操作指导</label>
+      <textarea id="operationGuide" rows="4" placeholder="描述该工艺的操作要点、注意事项等..."></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:16px;border-top:1px solid #ecf0f1">
+      <a href="/process/" class="btn">取消</a>
+      <button type="submit" class="btn btn-primary" onclick="submitCreate()">保存</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function submitCreate() {
+    var name = document.getElementById('prodName').value.trim();
+    var code = document.getElementById('processCode').value.trim();
+    var version = document.getElementById('processVersion').value.trim();
+    var guide = document.getElementById('operationGuide').value.trim();
+
+    if (!name) { alert('请输入产品名称'); return; }
+    if (!code) { alert('请输入工艺编号'); return; }
+    if (!version) { alert('请输入工艺版本'); return; }
+
+    post('/api/process/create-combo', {
+        product_name: name,
+        process_name: code,
+        version_no: version,
+        operation_guide: guide || ''
+    }, function(r) {
+        if (r.success) {
+            location.href = '/process/';
+        } else {
+            alert('保存失败: ' + (r.message || '未知错误'));
+        }
+    });
+}
+</script>
+{% endblock %}

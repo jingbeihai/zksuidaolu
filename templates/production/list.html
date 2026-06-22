@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}生产控制 - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>生产控制</h2>
+  <div class="header-right">
+    <span class="breadcrumb">首页 / 生产控制</span>
+  </div>
+</div>
+
+{% for fd in furnace_data %}
+{% set f = fd.furnace %}
+{% set run = fd.run %}
+{% set batches = fd.batches %}
+{% set blanks = fd.blanks %}
+{% set sections = fd.sections %}
+{% set pending = fd.pending_orders %}
+
+<div class="page-card" style="margin-bottom:20px">
+  <div class="card-title">
+    <span>{{ f.name }}</span>
+    <div style="display:flex;gap:6px;align-items:center">
+      {% if run %}
+      <span class="badge badge-{{ 'running' if run.status == 'running' else 'idle' if run.status == 'paused' else 'idle' }}">
+        {% if run.status == 'running' %}⚡ 运行中
+        {% elif run.status == 'paused' %}⏸ 已暂停
+        {% elif run.status == 'stopped' %}⏹ 已停止
+        {% else %}○ 待机中{% endif %}
+      </span>
+      {% else %}
+      <span class="badge badge-idle">○ 待机中</span>
+      {% endif %}
+      <span>{{ f.section_count }}节 · 每节{{ f.section_minutes }}分钟</span>
+    </div>
+  </div>
+
+  <!-- 炉内批次可视化 -->
+  <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:16px">
+    {% for s in sections %}
+    {% set batch_ns = namespace(batch=None) %}
+    {% for b in batches %}
+      {% if b.current_section == s.section_order %}
+        {% set batch_ns.batch = b %}
+      {% endif %}
+    {% endfor %}
+    {% set is_blank = false %}
+    {% for bl in blanks %}
+      {% if bl.section_order == s.section_order %}
+        {% set is_blank = true %}
+      {% endif %}
+    {% endfor %}
+
+    {% if batch_ns.batch %}
+    <div style="width:42px;height:50px;background:#1f618d;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:9px;cursor:default" title="{{ batch_ns.batch.batch_label }}">
+      <div style="font-weight:700;font-size:11px">{{ s.section_order }}</div>
+      <div style="font-size:7px;overflow:hidden;max-width:40px;text-overflow:ellipsis;white-space:nowrap">{{ batch_ns.batch.batch_label[-8:] }}</div>
+    </div>
+    {% elif is_blank %}
+    <div style="width:42px;height:50px;background:#bdc3c7;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#7f8c8d;font-size:9px;cursor:default" title="空白节拍">
+      <div style="font-weight:700;font-size:11px">{{ s.section_order }}</div>
+      <div style="font-size:7px">空</div>
+    </div>
+    {% else %}
+    <div style="width:42px;height:50px;background:#f2f3f4;border:1px solid #e5e7e8;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#bdc3c7;font-size:9px">
+      <div style="font-weight:700;font-size:11px">{{ s.section_order }}</div>
+      <div style="font-size:7px">- -</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- 操作按钮 -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    {% if not run or run.status == 'stopped' or run.status == 'idle' %}
+    {% if pending %}
+    <button class="btn btn-primary btn-sm" onclick="startProduction({{ f.id }})">▶ 开机生产</button>
+    {% else %}
+    <button class="btn btn-sm" disabled title="暂无待生产排产单">▶ 开机生产</button>
+    {% endif %}
+    {% elif run.status == 'running' %}
+    <button class="btn btn-sm" onclick="pauseProduction({{ f.id }})">⏸ 暂停</button>
+    <button class="btn btn-sm btn-danger" onclick="stopProduction({{ f.id }})">⏹ 停止</button>
+    <button class="btn btn-sm" onclick="advanceAll({{ f.id }})">▶▶ 整体前进</button>
+    <button class="btn btn-sm" onclick="retreatAll({{ f.id }})">◀◀ 整体后退</button>
+    {% elif run.status == 'paused' %}
+    <button class="btn btn-primary btn-sm" onclick="resumeProduction({{ f.id }})">▶ 恢复</button>
+    <button class="btn btn-sm btn-danger" onclick="stopProduction({{ f.id }})">⏹ 停止</button>
+    {% endif %}
+  </div>
+
+  <!-- 批次详情 -->
+  {% if run and batches %}
+  <div style="font-size:13px">
+    <strong style="color:#2c3e50">炉内批次：</strong>
+    <table class="data-table" style="margin-top:6px;font-size:12px">
+      <thead>
+        <tr>
+          <th>批号</th>
+          <th>产品</th>
+          <th>工艺</th>
+          <th>当前位置</th>
+          <th style="width:140px">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td><strong>{{ b.batch_label }}</strong></td>
+          <td>{{ b.product_name }}</td>
+          <td style="color:#7f8c8d">{{ b.process_name }}</td>
+          <td>第{{ b.current_section }}节</td>
+          <td>
+            <button class="btn btn-sm" onclick="advanceBatch({{ f.id }}, {{ b.id }})">前进1节</button>
+            <button class="btn btn-sm" onclick="retreatBatch({{ f.id }}, {{ b.id }})" {% if b.current_section <= 1 %}disabled{% endif %}>后退1节</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<!-- 开机选择弹窗 -->
+<div id="startModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:560px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:#1a5276;font-size:18px">选择排产单 - <span id="startFurnaceName"></span></h3>
+      <button onclick="closeModal('startModal')" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="orderListForStart" style="max-height:300px;overflow:auto">
+      <!-- JS 动态生成 -->
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:16px;border-top:1px solid #d5dbdf">
+      <button class="btn" onclick="closeModal('startModal')">取消</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var startFurnaceId = null;
+
+function startProduction(furnaceId) {
+    startFurnaceId = furnaceId;
+    document.getElementById('startFurnaceName').textContent = document.querySelector('.card-title span').textContent;
+    get('/api/production/furnace/' + furnaceId, function(data) {
+        var list = document.getElementById('orderListForStart');
+        if (!data.pending_orders || data.pending_orders.length === 0) {
+            list.innerHTML = '<div style="text-align:center;padding:30px;color:#bdc3c7">暂无待生产排产单</div>';
+            document.getElementById('startModal').style.display = 'flex';
+            return;
+        }
+        var html = '<table class="data-table">';
+        html += '<thead><tr><th>单号</th><th>产品</th><th>批号</th><th>数量</th><th>操作</th></tr></thead><tbody>';
+        for (var i = 0; i < data.pending_orders.length; i++) {
+            var o = data.pending_orders[i];
+            html += '<tr>' +
+                '<td>' + o.order_no + '</td>' +
+                '<td>' + o.product_name + '</td>' +
+                '<td>' + o.batch_no + '</td>' +
+                '<td>' + o.quantity + '</td>' +
+                '<td><button class="btn btn-primary btn-sm" onclick="confirmStart(' + furnaceId + ', ' + o.id + ')">选择</button></td>' +
+                '</tr>';
+        }
+        html += '</tbody></table>';
+        list.innerHTML = html;
+        document.getElementById('startModal').style.display = 'flex';
+    });
+}
+
+function confirmStart(furnaceId, orderId) {
+    post('/api/production/start/' + furnaceId, { order_id: orderId }, function(r) {
+        if (r.success) {
+            closeModal('startModal');
+            location.reload();
+        } else {
+            alert('开机失败: ' + r.message);
+        }
+    });
+}
+
+function pauseProduction(furnaceId) {
+    post('/api/production/' + furnaceId + '/pause', {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function resumeProduction(furnaceId) {
+    post('/api/production/' + furnaceId + '/resume', {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function stopProduction(furnaceId) {
+    if (!confirm('确认停止生产？')) return;
+    post('/api/production/' + furnaceId + '/stop', {}, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function advanceBatch(furnaceId, batchId) {
+    post('/api/production/' + furnaceId + '/advance', { batch_id: batchId }, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function retreatBatch(furnaceId, batchId) {
+    post('/api/production/' + furnaceId + '/retreat', { batch_id: batchId }, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function advanceAll(furnaceId) {
+    if (!confirm('确认整体前进一节？')) return;
+    post('/api/production/' + furnaceId + '/advance', { all: true }, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function retreatAll(furnaceId) {
+    if (!confirm('确认整体后退一节？')) return;
+    post('/api/production/' + furnaceId + '/retreat', { all: true }, function(r) {
+        if (r.success) location.reload();
+        else alert(r.message);
+    });
+}
+
+function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+</script>
+{% endblock %}
