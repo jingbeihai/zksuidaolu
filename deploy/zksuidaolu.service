@@ -1,0 +1,25 @@
+[Unit]
+Description=中科恒泰隧道炉排产与生产可视化系统
+After=network.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/zksuidaolu
+EnvironmentFile=/opt/zksuidaolu/.env
+Environment=PORT=8003
+ExecStart=/opt/zksuidaolu/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8003
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zksuidaolu
+
+# 安全加固（可选，按需取消注释）
+# NoNewPrivileges=true
+# PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -13,6 +13,7 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "GHT4EFy228jQh5sx")
 DB_NAME = os.getenv("DB_NAME", "zksuidaolu2")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "zk-tunnel-furnace-dev-secret-2026")
+PORT = int(os.getenv("PORT", 7000))
 SESSION_COOKIE = "tunnel_session"
 SESSION_MAX_AGE = 8 * 3600
 
